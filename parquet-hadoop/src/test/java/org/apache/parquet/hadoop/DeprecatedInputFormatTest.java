@@ -112,7 +112,7 @@ public class DeprecatedInputFormatTest {
     }
   }
 
-  @Test
+  
   public void testReadWriteWithCountDeprecated() throws Exception {
     runMapReduceJob(CompressionCodecName.GZIP);
     assertTrue(mapRedJob.getCounters().getGroup("parquet").getCounterForName("bytesread").getValue() > 0L);
@@ -122,7 +122,7 @@ public class DeprecatedInputFormatTest {
     //not testing the time read counter since it could be zero due to the size of data is too small
   }
 
-  @Test
+  
   public void testReadWriteWithoutCounter() throws Exception {
     jobConf.set("parquet.benchmark.time.read", "false");
     jobConf.set("parquet.benchmark.bytes.total", "false");

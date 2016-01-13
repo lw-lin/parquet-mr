@@ -273,7 +273,7 @@ public class TestParquetMetadataConverter {
     ParquetMetadata.toJSON(metadata);
   }
 
-  @Test
+
   public void testMetadataToJson() {
     ParquetMetadata metadata = new ParquetMetadata(null, null);
     assertEquals("{\"fileMetaData\":null,\"blocks\":null}", ParquetMetadata.toJSON(metadata));

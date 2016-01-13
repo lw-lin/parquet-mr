@@ -81,7 +81,7 @@ public class DeprecatedOutputFormatTest {
     }
   }
 
-  @Test
+  
   public void testReadWrite() throws Exception {
     runMapReduceJob(CompressionCodecName.GZIP);
     assert(mapRedJob.isSuccessful());
