@@ -41,6 +41,15 @@ enum PredefinedColumnIOSet {
   private final boolean inRequestedSchema;
   private final boolean inFilterSchema;
 
+  public static PredefinedColumnIOSet get(boolean inFileSchema, boolean inRequestedSchema, boolean inFilterSchema) {
+    for (PredefinedColumnIOSet set : values()) {
+      if (set.inFileSchema() == inFileSchema && set.inRequestedSchema == inRequestedSchema && set.inFilterSchema() == inFileSchema) {
+        return set;
+      }
+    }
+    return UNKNOWN;
+  }
+
   public boolean isKnown() {
     return known;
   }
