@@ -18,8 +18,8 @@
  */
 package org.apache.parquet.io;
 
-import static org.apache.parquet.schema.Type.Repetition.REPEATED;
-import static org.apache.parquet.schema.Type.Repetition.REQUIRED;
+import org.apache.parquet.Log;
+import org.apache.parquet.schema.GroupType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,8 +27,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.parquet.Log;
-import org.apache.parquet.schema.GroupType;
+import static org.apache.parquet.schema.Type.Repetition.REPEATED;
+import static org.apache.parquet.schema.Type.Repetition.REQUIRED;
 
 /**
  * Group level of the IO structure
@@ -44,8 +44,8 @@ public class GroupColumnIO extends ColumnIO {
   private final List<ColumnIO> children = new ArrayList<ColumnIO>();
   private int childrenSize = 0;
 
-  GroupColumnIO(GroupType groupType, GroupColumnIO parent, int index) {
-    super(groupType, parent, index);
+  GroupColumnIO(GroupType groupType, GroupColumnIO parent, int index, PredefinedColumnIOSet columnIOSet) {
+    super(groupType, parent, index, columnIOSet);
   }
 
   void add(ColumnIO child) {

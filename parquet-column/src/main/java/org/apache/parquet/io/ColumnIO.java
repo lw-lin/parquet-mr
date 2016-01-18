@@ -44,13 +44,15 @@ abstract public class ColumnIO {
   private int definitionLevel;
   private String[] fieldPath;
   private int[] indexFieldPath;
+  private final PredefinedColumnIOSet columnIOSet;
 
 
-  ColumnIO(Type type, GroupColumnIO parent, int index) {
+  ColumnIO(Type type, GroupColumnIO parent, int index,PredefinedColumnIOSet columnIOSet) {
     this.type = type;
     this.parent = parent;
     this.index = index;
     this.name = type.getName();
+    this.columnIOSet = columnIOSet;
   }
 
   String[] getFieldPath() {

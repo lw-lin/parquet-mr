@@ -19,13 +19,13 @@
 package org.apache.parquet.io;
 
 
-import java.util.Arrays;
-import java.util.List;
-
 import org.apache.parquet.column.ColumnDescriptor;
-import org.apache.parquet.schema.Type;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
+import org.apache.parquet.schema.Type;
+
+import java.util.Arrays;
+import java.util.List;
 
 
 /**
@@ -42,8 +42,8 @@ public class PrimitiveColumnIO extends ColumnIO {
   private ColumnDescriptor columnDescriptor;
   private final int id;
 
-  PrimitiveColumnIO(Type type, GroupColumnIO parent, int index, int id) {
-    super(type, parent, index);
+  PrimitiveColumnIO(Type type, GroupColumnIO parent, int index, int id, PredefinedColumnIOSet columnIOSet) {
+    super(type, parent, index, columnIOSet);
     this.id = id;
   }
 
