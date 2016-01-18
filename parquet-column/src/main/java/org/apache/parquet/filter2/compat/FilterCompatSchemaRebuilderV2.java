@@ -32,6 +32,11 @@ import java.util.Set;
 
 public class FilterCompatSchemaRebuilderV2 {
 
+  public static final FilterCompatSchemaRebuilderV2 INSTANCE = new FilterCompatSchemaRebuilderV2();
+
+  private FilterCompatSchemaRebuilderV2() {
+  }
+
   public static MessageType rebuildSchema(FilterCompat.FilterPredicateCompat filterPredicateCompat) {
     Set<ColumnPath> columnPaths = FilterCompatColumnCollector.INSTANCE.visit(filterPredicateCompat);
     NameAndChildren root = buildNameAndChildren(columnPaths);
