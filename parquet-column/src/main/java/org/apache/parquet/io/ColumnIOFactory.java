@@ -18,26 +18,22 @@
  */
 package org.apache.parquet.io;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
+import org.apache.parquet.ShouldNeverHappenException;
 import org.apache.parquet.filter2.compat.FilterCompat;
-import org.apache.parquet.filter2.compat.FilterCompat.Filter;
-import org.apache.parquet.filter2.compat.FilterCompatColumnCollector;
-import org.apache.parquet.filter2.compat.FilterCompatSchemaRebuilder;
-import org.apache.parquet.hadoop.metadata.ColumnPath;
+import org.apache.parquet.filter2.compat.FilterCompatSchemaRebuilderV2;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 import org.apache.parquet.schema.TypeVisitor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Factory constructing the ColumnIO structure from the schema
  *
  * @author Julien Le Dem
- *
  */
 public class ColumnIOFactory {
 
@@ -51,17 +47,22 @@ public class ColumnIOFactory {
     private final FilterCompat.FilterPredicateCompat filter;
     private final MessageType filterSchema;
     private final String createdBy;
+
+    private PredefinedColumnIOSet currentColumnIOSet;
     private int currentRequestedIndex;
     private Type currentRequestedType;
-    private String currentPredicateColumnPathString;
+    private final int currentFilterIndex = -100;
+    private Type currentFilterType;
+
     private boolean strictTypeChecking;
 
-    private ColumnIOCreatorVisitor(boolean validating, MessageType requestedSchema, FilterCompat.FilterPredicateCompat filter, String createdBy, boolean strictTypeChecking) {
+    private ColumnIOCreatorVisitor(boolean validating, MessageType requestedSchema, FilterCompat.FilterPredicateCompat filter, String createdBy,
+                                   boolean strictTypeChecking) {
       this.validating = validating;
       this.requestedSchema = requestedSchema;
       this.filter = filter;
       // collects the columns referred by filter
-      this.filterSchema = FilterCompatSchemaRebuilder.INSTANCE.visit(filter);
+      this.filterSchema = filter == null ? null : FilterCompatSchemaRebuilderV2.INSTANCE.rebuildSchema(filter);
       this.createdBy = createdBy;
       this.strictTypeChecking = strictTypeChecking;
     }
@@ -69,7 +70,7 @@ public class ColumnIOFactory {
     @Override
     public void visit(MessageType messageType) {
       columnIO = new MessageColumnIO(requestedSchema, validating, createdBy);
-      visitChildren(columnIO, messageType, requestedSchema);
+      visitChildren(columnIO, messageType, requestedSchema, filterSchema);
       columnIO.setLevels();
       columnIO.setLeaves(leaves);
     }
@@ -79,44 +80,72 @@ public class ColumnIOFactory {
       if (currentRequestedType.isPrimitive()) {
         incompatibleSchema(groupType, currentRequestedType);
       }
-      GroupColumnIO newIO = new GroupColumnIO(groupType, current, currentRequestedIndex);
-      current.add(newIO);
-      visitChildren(newIO, groupType, currentRequestedType.asGroupType());
+      GroupColumnIO newIO;
+      switch (currentColumnIOSet) {
+        case D_IN_FILE_AND_REQUESTED_BUT_NOT_IN_FILTER:
+          newIO = new GroupColumnIO(groupType, current, currentRequestedIndex, currentColumnIOSet);
+          current.add(newIO);
+          visitChildren(newIO, groupType, currentRequestedType.asGroupType(), null);
+          break;
+        case E_IN_FILE_AND_FILTER_BUT_NOT_IN_REQUESTED:
+          newIO = new GroupColumnIO(groupType, current, currentFilterIndex, currentColumnIOSet);
+          current.add(newIO);
+          visitChildren(newIO, groupType, null, currentFilterType.asGroupType());
+          break;
+        case G_IN_FILE_AND_REQUEST_AND_FILER:
+          newIO = new GroupColumnIO(groupType, current, currentRequestedIndex, currentColumnIOSet);
+          current.add(newIO);
+          visitChildren(newIO, groupType, currentRequestedType.asGroupType(), currentFilterType.asGroupType());
+          break;
+        default:
+          throw new ShouldNeverHappenException();
+      }
     }
 
-    private void visitChildren(GroupColumnIO newIO, GroupType groupType, GroupType requestedGroupType) {
+    private void visitChildren(GroupColumnIO newIO, GroupType groupType, GroupType requestedGroupType, GroupType filterGroupType) {
       GroupColumnIO oldIO = current;
       current = newIO;
       for (Type type : groupType.getFields()) {
+        boolean inFileSchema = true;
+        boolean inRequestedSchema = requestedGroupType != null && requestedGroupType.containsField(type.getName());
+        boolean inFilterSchema = filterGroupType != null && filterGroupType.containsField(type.getName());
+        currentColumnIOSet = PredefinedColumnIOSet.get(inFileSchema, inRequestedSchema, inFilterSchema);
+
         // if the file schema does not contain the field it will just stay null
-        if (requestedGroupType.containsField(type.getName())) {
+        if (inRequestedSchema) {
           currentRequestedIndex = requestedGroupType.getFieldIndex(type.getName());
           currentRequestedType = requestedGroupType.getType(currentRequestedIndex);
           if (currentRequestedType.getRepetition().isMoreRestrictiveThan(type.getRepetition())) {
             incompatibleSchema(type, currentRequestedType);
           }
-          type.accept(this);
         }
-
-        else{
-          if (currentPredicateColumnPathString == null)
-
-          currentPredicateColumnPathString = type.getName();
-          else
-            currentPredicateColumnPathString = currentPredicateColumnPathString + "." + type.getName();
-
+        if (inFilterSchema) {
+          currentFilterType = filterGroupType.getType(type.getName());
         }
+        type.accept(this);
       }
       current = oldIO;
     }
 
     @Override
     public void visit(PrimitiveType primitiveType) {
-      if (!currentRequestedType.isPrimitive() ||
+      PrimitiveColumnIO newIO;
+      switch (currentColumnIOSet) {
+        case D_IN_FILE_AND_REQUESTED_BUT_NOT_IN_FILTER:
+        case G_IN_FILE_AND_REQUEST_AND_FILER:
+          if (!currentRequestedType.isPrimitive() ||
               (this.strictTypeChecking && currentRequestedType.asPrimitiveType().getPrimitiveTypeName() != primitiveType.getPrimitiveTypeName())) {
-        incompatibleSchema(primitiveType, currentRequestedType);
+            incompatibleSchema(primitiveType, currentRequestedType);
+          }
+          newIO = new PrimitiveColumnIO(primitiveType, current, currentRequestedIndex, leaves.size(), currentColumnIOSet);
+          break;
+        case E_IN_FILE_AND_FILTER_BUT_NOT_IN_REQUESTED:
+          newIO = new PrimitiveColumnIO(primitiveType, current, currentFilterIndex, leaves.size(), currentColumnIOSet);
+          break;
+        default:
+          throw new ShouldNeverHappenException();
       }
-      PrimitiveColumnIO newIO = new PrimitiveColumnIO(primitiveType, current, currentRequestedIndex, leaves.size());
+
       current.add(newIO);
       leaves.add(newIO);
     }
@@ -143,6 +172,7 @@ public class ColumnIOFactory {
 
   /**
    * validation is off by default
+   *
    * @param createdBy createdBy string for readers
    */
   public ColumnIOFactory(String createdBy) {
@@ -157,7 +187,7 @@ public class ColumnIOFactory {
   }
 
   /**
-   * @param createdBy createdBy string for readers
+   * @param createdBy  createdBy string for readers
    * @param validating to turn validation on
    */
   public ColumnIOFactory(String createdBy, boolean validating) {
@@ -168,7 +198,7 @@ public class ColumnIOFactory {
 
   /**
    * @param requestedSchema the requestedSchema we want to read/write
-   * @param fileSchema the file schema (when reading it can be different from the requested schema)
+   * @param fileSchema      the file schema (when reading it can be different from the requested schema)
    * @return the corresponding serializing/deserializing structure
    */
   public MessageColumnIO getColumnIO(MessageType requestedSchema, MessageType fileSchema) {
@@ -177,8 +207,8 @@ public class ColumnIOFactory {
 
   /**
    * @param requestedSchema the requestedSchema we want to read/write
-   * @param fileSchema the file schema (when reading it can be different from the requested schema)
-   * @param strict should file type and requested primitive types match
+   * @param fileSchema      the file schema (when reading it can be different from the requested schema)
+   * @param strict          should file type and requested primitive types match
    * @return the corresponding serializing/deserializing structure
    */
   public MessageColumnIO getColumnIO(MessageType requestedSchema, MessageType fileSchema, boolean strict) {
@@ -188,12 +218,12 @@ public class ColumnIOFactory {
 
   /**
    * @param requestedSchema the requestedSchema we want to read/write
-   * @param fileSchema the file schema (when reading it can be different from the requested schema)
-   * @param filter the predicate should be applied (it can contains columns specified neither in requestedSchema nor in fileSchema)
-   * @param strict should file type and requested primitive types match
+   * @param fileSchema      the file schema (when reading it can be different from the requested schema)
+   * @param filter          the predicate should be applied (it can contains columns specified neither in requestedSchema nor in fileSchema)
+   * @param strict          should file type and requested primitive types match
    * @return the corresponding serializing/deserializing structure
    */
-  public MessageColumnIO getColumnIO(MessageType requestedSchema, MessageType fileSchema, Filter filter, boolean strict) {
+  public MessageColumnIO getColumnIO(MessageType requestedSchema, MessageType fileSchema, FilterCompat.FilterPredicateCompat filter, boolean strict) {
     ColumnIOCreatorVisitor visitor = new ColumnIOCreatorVisitor(validating, requestedSchema, filter, createdBy, strict);
     fileSchema.accept(visitor);
     return visitor.getColumnIO();
