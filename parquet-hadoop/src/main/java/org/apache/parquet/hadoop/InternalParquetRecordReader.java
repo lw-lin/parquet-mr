@@ -18,17 +18,8 @@
  */
 package org.apache.parquet.hadoop;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-
 import org.apache.parquet.Log;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
@@ -48,6 +39,14 @@ import org.apache.parquet.io.api.RecordMaterializer.RecordMaterializationExcepti
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static java.lang.String.format;
 import static org.apache.parquet.Log.DEBUG;
@@ -136,7 +135,18 @@ class InternalParquetRecordReader<T> {
       BenchmarkCounter.incrementTime(timeSpentReading);
       if (Log.INFO) LOG.info("block read in memory in " + timeSpentReading + " ms. row count = " + pages.getRowCount());
       if (Log.DEBUG) LOG.debug("initializing Record assembly with requested schema " + requestedSchema);
-      MessageColumnIO columnIO = columnIOFactory.getColumnIO(requestedSchema, fileSchema, strictTypeChecking);
+
+      /*
+      * Notes:
+      * (1) For filter API v1, we pass in compat = null, to fall back to use only requested_schema ∩ file_schema in the read path
+      * (2) For filter API v2, we pass in compat = filter, to also push predicates into the read path
+      * (3) For NOOP, we also pass in compat = null, to fall back to use only requested_schema ∩ file_schema in the read path
+      * See PARQUET-297 for details.
+      * */
+      FilterCompat.FilterPredicateCompat compat =
+          filter instanceof FilterCompat.FilterPredicateCompat ? (FilterCompat.FilterPredicateCompat) filter : null;
+      MessageColumnIO columnIO = columnIOFactory.getColumnIO(requestedSchema, fileSchema, compat, strictTypeChecking);
+
       recordReader = columnIO.getRecordReader(pages, recordConverter, filter);
       startedAssemblingCurrentBlockAt = System.currentTimeMillis();
       totalCountLoadedSoFar += pages.getRowCount();
