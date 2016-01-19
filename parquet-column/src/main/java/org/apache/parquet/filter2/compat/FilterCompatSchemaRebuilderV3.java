@@ -30,16 +30,18 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
-@Deprecated
-public class FilterCompatSchemaRebuilderV2 {
+public class FilterCompatSchemaRebuilderV3 {
 
-  @Deprecated
-  public static final FilterCompatSchemaRebuilderV2 INSTANCE = new FilterCompatSchemaRebuilderV2();
+  public static final FilterCompatSchemaRebuilderV3 INSTANCE = new FilterCompatSchemaRebuilderV3();
 
-  private FilterCompatSchemaRebuilderV2() {
+  private FilterCompatSchemaRebuilderV3() {
   }
 
   public MessageType rebuildSchema(FilterCompat.Filter filter) {
+    return rebuildSchema(null, filter);
+  }
+
+  public MessageType rebuildSchema(MessageType fileSchema, FilterCompat.Filter filter) {
     Set<ColumnPath> columnPaths = filter.accept(FilterCompatColumnCollector.INSTANCE);
     NameAndChildren root = buildNameAndChildren(columnPaths);
     MessageType messageType = null;
@@ -101,30 +103,47 @@ public class FilterCompatSchemaRebuilderV2 {
       return children != null && children.contains(field);
     }
 
-
     public MessageType asMessageType() {
-      return new MessageType("root", childrenAsTypes());
+      return asMessageType(null);
     }
 
-    private List<Type> childrenAsTypes() {
+    public MessageType asMessageType(MessageType fileSchema) {
+      return new MessageType("root", childrenAsTypes(fileSchema));
+    }
+
+    private List<Type> childrenAsTypes(GroupType origGroupType) {
       List<Type> types = new LinkedList<Type>();
       if (children == null || children.size() == 0) {
         throw new ShouldNeverHappenException();
       }
       for (NameAndChildren child : children) {
-        types.add(child.asType());
+        Type origType = null;
+        if (origGroupType != null && origGroupType.containsField(child.name)) {
+          origType = origGroupType.getType(child.name);
+        }
+        types.add(child.asType(origType));
       }
       return types;
     }
 
-    private Type asType() {
+    private Type asType(Type origType) {
       Type t;
       switch (type) {
         case GROUP:
-          t = new GroupType(Type.Repetition.OPTIONAL, name, childrenAsTypes());
+          if (origType != null) {
+            GroupType gt = origType.asGroupType();
+            t = new GroupType(gt.getRepetition(), name, childrenAsTypes(gt));
+          } else {
+            t = new GroupType(Type.Repetition.OPTIONAL, name, childrenAsTypes(null));
+          }
           break;
         case PRIMITIVE:
-          t = new PrimitiveType(Type.Repetition.OPTIONAL, PrimitiveType.PrimitiveTypeName.INT32, name);
+          if (origType != null) {
+            PrimitiveType pt = origType.asPrimitiveType();
+            t = new PrimitiveType(pt.getRepetition(), pt.getPrimitiveTypeName(), name);
+          } else {
+            t = new PrimitiveType(Type.Repetition.OPTIONAL, PrimitiveType.PrimitiveTypeName.INT32, name);
+          }
           break;
         default:
           throw new ShouldNeverHappenException();
