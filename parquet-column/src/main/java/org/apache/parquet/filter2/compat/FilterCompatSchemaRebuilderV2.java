@@ -37,8 +37,8 @@ public class FilterCompatSchemaRebuilderV2 {
   private FilterCompatSchemaRebuilderV2() {
   }
 
-  public static MessageType rebuildSchema(FilterCompat.FilterPredicateCompat filterPredicateCompat) {
-    Set<ColumnPath> columnPaths = FilterCompatColumnCollector.INSTANCE.visit(filterPredicateCompat);
+  public MessageType rebuildSchema(FilterCompat.Filter filter) {
+    Set<ColumnPath> columnPaths = filter.accept(FilterCompatColumnCollector.INSTANCE);
     NameAndChildren root = buildNameAndChildren(columnPaths);
     MessageType messageType = null;
     if (root != null) {
