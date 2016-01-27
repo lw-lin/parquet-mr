@@ -26,6 +26,7 @@ import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.filter.UnboundRecordFilter;
 import org.apache.parquet.filter2.compat.FilterCompat;
 import org.apache.parquet.filter2.compat.FilterCompat.Filter;
+import org.apache.parquet.filter2.compat.FilterCompatSchemaRebuilderV3;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
@@ -60,6 +61,7 @@ class InternalParquetRecordReader<T> {
   private final Filter filter;
 
   private MessageType requestedSchema;
+  private MessageType filterSchema;
   private MessageType fileSchema;
   private int columnCount;
   private final ReadSupport<T> readSupport;
@@ -190,6 +192,14 @@ class InternalParquetRecordReader<T> {
         configuration, fileMetadata, fileSchema, readContext);
     this.strictTypeChecking = configuration.getBoolean(STRICT_TYPE_CHECKING, true);
     List<ColumnDescriptor> columns = requestedSchema.getColumns();
+
+    this.filterSchema = FilterCompatSchemaRebuilderV3.INSTANCE.rebuildSchema(fileSchema, filter);
+    if (filterSchema!=null) {
+      // filterSchema.
+      filterSchema.getColumns();
+    }
+
+
     reader = new ParquetFileReader(configuration, parquetFileMetadata, file, blocks, columns);
     for (BlockMetaData block : blocks) {
       total += block.getRowCount();
